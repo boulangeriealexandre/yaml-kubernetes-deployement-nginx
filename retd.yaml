@@ -127,6 +127,11 @@ ingress:
     metadata:
       namespace: ${namespace.metadata.name}
       name: nginx
+      annotations:
+        # Controller-specific tweaks (Example uses NGINX Ingress Controller)
+        nginx.ingress.kubernetes.io/ssl-redirect: "true"
+        nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+        nginx.ingress.kubernetes.io/rate-limit: "100"
     spec:
       ingressClassName: nginx
       rules:
