@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-file-config
+data:
+  app.conf: |
+    mode=prod
+    greeting=Hello from a mounted file
