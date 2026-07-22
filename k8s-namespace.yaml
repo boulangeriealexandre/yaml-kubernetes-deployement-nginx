@@ -1,0 +1,9 @@
+# ==============================================================================
+# NAMESPACE RESOURCE: Creates the isolated environment
+# ==============================================================================
+apiVersion: v1            # [Type: string] Core API version
+kind: Namespace           # [Type: string] The type of resource
+metadata:                 # [Type: map] Metadata for the namespace
+  name: my-web-namespace  # [Type: string] The name of your new namespace
+  labels:                 # [Type: map] Optional labels for the namespace
+    env: production       # [Type: string] Example label
