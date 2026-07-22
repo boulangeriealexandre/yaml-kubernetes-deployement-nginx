@@ -1,0 +1,81 @@
+name: pulumi-nginx
+description: Deploy nginx on Kubernetes
+runtime: yaml
+variables:
+  appLabels:
+    app: nginx
+resources:
+  namespace:
+    type: kubernetes:core/v1:Namespace
+    properties:
+      metadata:
+        name: nginx
+
+  deployment:
+    type: kubernetes:apps/v1:Deployment
+    properties:
+      metadata:
+        namespace: ${namespace.metadata.name}
+        name: nginx
+      spec:
+        selector:
+          matchLabels: ${appLabels}
+        replicas: 2
+        template:
+          metadata:
+            labels: ${appLabels}
+          spec:
+            containers:
+              - name: nginx
+                image: nginx:alpine
+                ports:
+                  - containerPort: 80
+                resources:
+                  requests:
+                    cpu: 100m
+                    memory: 128Mi
+                  limits:
+                    cpu: 500m
+                    memory: 256Mi
+
+  service:
+    type: kubernetes:core/v1:Service
+    properties:
+      metadata:
+        namespace: ${namespace.metadata.name}
+        name: nginx
+      spec:
+        selector: ${appLabels}
+        ports:
+          - port: 80
+            targetPort: 80
+            protocol: TCP
+        type: ClusterIP
+
+  ingress:
+    type: kubernetes:networking.k8s.io/v1:Ingress
+    properties:
+      metadata:
+        namespace: ${namespace.metadata.name}
+        name: nginx
+      spec:
+        rules:
+          - host: nginx.local
+            http:
+              paths:
+                - pathType: Prefix
+                  path: /
+                  backend:
+                    service:
+                      name: nginx
+                      port:
+                        number: 80
+outputs:
+  namespace: ${namespace.metadata.name}
+  deployment: ${deployment.metadata.name}
+  service: ${service.metadata.name}
+  serviceClusterIP: ${service.spec.clusterIP}
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: kubernetes-yaml
