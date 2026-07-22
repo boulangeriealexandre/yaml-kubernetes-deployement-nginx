@@ -1,6 +1,6 @@
 # Kubernetes NGINX Deployment
 
-A complete Kubernetes deployment configuration for running NGINX web servers using YAML manifests. This repository contains production-ready configurations with best practices for resource manageme[...]
+A complete Kubernetes deployment configuration for running NGINX web servers using YAML manifests. This repository contains production-ready configurations with best practices for resource management, along with Job and CronJob automation examples.
 
 ## 📋 Table of Contents
 
@@ -9,6 +9,9 @@ A complete Kubernetes deployment configuration for running NGINX web servers usi
 - [Prerequisites](#prerequisites)
 - [Installation & Deployment](#installation--deployment)
 - [Configuration Files](#configuration-files)
+- [K8s Job](#k8s-job)
+- [K8s CronJob](#k8s-cronjob)
+- [concurrencyPolicy Options](#concurrencypolicy-options)
 - [Resource Specifications](#resource-specifications)
 - [Usage Examples](#usage-examples)
 - [Example: Using GREETING in a Python script](#example-using-greeting-in-a-python-script)
@@ -25,6 +28,7 @@ This project provides a complete setup for deploying NGINX on Kubernetes cluster
 - **Resource Management**: CPU and memory requests/limits for proper resource allocation
 - **Volume Management**: Persistent storage configuration with PersistentVolumeClaim
 - **Environment Configuration**: Environment variables and port configuration
+- **Job & CronJob Automation**: One-time and scheduled job execution examples
 
 ## Repository Structure
 
@@ -33,7 +37,9 @@ This project provides a complete setup for deploying NGINX on Kubernetes cluster
 ├── README.md                    # This file
 ├── LICENSE                      # Apache License 2.0
 ├── k8s-namespace.yaml          # Kubernetes Namespace resource
-└── k8s-deployement.yaml        # NGINX Deployment configuration
+├── k8s-deployement.yaml        # NGINX Deployment configuration
+├── k8s-job.yaml                # Kubernetes Job resource
+└── k8s-cronjob.yaml            # Kubernetes CronJob resource
 ```
 
 ## Prerequisites
@@ -70,7 +76,17 @@ kubectl get deployments -n my-web-namespace
 kubectl get pods -n my-web-namespace
 ```
 
-### Step 3: Check Pod Status
+### Step 3: Deploy Jobs (Optional)
+
+```bash
+# Deploy a one-time job
+kubectl apply -f k8s-job.yaml
+
+# Deploy a scheduled cronjob
+kubectl apply -f k8s-cronjob.yaml
+```
+
+### Step 4: Check Pod Status
 
 ```bash
 # View all pods in the namespace
@@ -136,6 +152,272 @@ Resources:
 - **Type**: PersistentVolumeClaim (`my-web-pvc`)
 - **Access**: Read-Write enabled
 
+## K8s Job
+
+A Kubernetes Job creates one or more pods and ensures that a specified number of them successfully terminate. Jobs are useful for running one-time tasks, batch processing, or scheduled maintenance.
+
+**Key Characteristics:**
+- Runs one or more pods to completion
+- Automatically retries failed pods (configurable)
+- Suitable for batch processing, one-time operations, and data processing tasks
+- Can run in parallel or sequentially
+
+**Use Cases:**
+- Database backups
+- Data migrations
+- Report generation
+- Batch data processing
+- One-time maintenance tasks
+
+**Example Job Configuration:**
+
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: backup-job
+  namespace: my-web-namespace
+spec:
+  template:
+    spec:
+      containers:
+      - name: backup
+        image: backup-utility:1.0
+        command: ["./backup.sh"]
+      restartPolicy: Never
+  backoffLimit: 3  # Number of retries before marking job as failed
+```
+
+**Useful Commands:**
+
+```bash
+# Create a job
+kubectl apply -f k8s-job.yaml
+
+# List jobs
+kubectl get jobs -n my-web-namespace
+
+# Get detailed job information
+kubectl describe job backup-job -n my-web-namespace
+
+# View job logs
+kubectl logs job/backup-job -n my-web-namespace
+
+# Delete a job
+kubectl delete job backup-job -n my-web-namespace
+```
+
+## K8s CronJob
+
+A Kubernetes CronJob creates Jobs on a repeating schedule, similar to Linux `cron`. It uses the standard cron format for scheduling.
+
+**Key Characteristics:**
+- Runs jobs on a scheduled basis
+- Uses cron syntax for scheduling (minute, hour, day, month, day-of-week)
+- Automatically creates Job objects according to the schedule
+- Manages job history and cleanup
+- Supports timezone configuration
+
+**Use Cases:**
+- Daily/hourly database backups
+- Scheduled data cleanup
+- Periodic health checks
+- Report generation
+- Regular maintenance tasks
+
+**Cron Schedule Format:**
+```
+┌───────────── minute (0 - 59)
+│ ┌───────────── hour (0 - 23)
+│ │ ┌───────────── day of month (1 - 31)
+│ │ │ ┌───────────── month (1 - 12)
+│ │ │ │ ┌───────────── day of week (0 - 6) (Sunday to Saturday)
+│ │ │ │ │
+│ │ │ │ │
+* * * * *
+```
+
+**Common Examples:**
+- `0 2 * * *` - Every day at 2:00 AM
+- `0 */6 * * *` - Every 6 hours
+- `30 3 * * 0` - Every Sunday at 3:30 AM
+- `0 0 1 * *` - First day of every month at midnight
+
+**Example CronJob Configuration:**
+
+```yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup-cronjob
+  namespace: my-web-namespace
+spec:
+  schedule: "0 2 * * *"  # Every day at 2:00 AM
+  concurrencyPolicy: Forbid  # Prevent overlapping executions
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: backup
+            image: backup-utility:1.0
+            command: ["./backup.sh"]
+          restartPolicy: OnFailure
+      backoffLimit: 3
+```
+
+**Useful Commands:**
+
+```bash
+# Create a cronjob
+kubectl apply -f k8s-cronjob.yaml
+
+# List cronjobs
+kubectl get cronjobs -n my-web-namespace
+
+# Get detailed cronjob information
+kubectl describe cronjob backup-cronjob -n my-web-namespace
+
+# View triggered jobs
+kubectl get jobs -n my-web-namespace
+
+# View cronjob logs (get the pod from the job)
+kubectl logs <pod-name> -n my-web-namespace
+
+# Suspend a cronjob (prevent new jobs from being created)
+kubectl patch cronjob backup-cronjob -p '{"spec":{"suspend":true}}' -n my-web-namespace
+
+# Resume a suspended cronjob
+kubectl patch cronjob backup-cronjob -p '{"spec":{"suspend":false}}' -n my-web-namespace
+
+# Delete a cronjob
+kubectl delete cronjob backup-cronjob -n my-web-namespace
+```
+
+## concurrencyPolicy Options
+
+The `concurrencyPolicy` field in CronJob specifications controls how Kubernetes handles overlapping job executions. This is crucial for preventing overlapping jobs, especially in scenarios like database backups or maintenance tasks.
+
+### Three Available Options:
+
+#### 1. **Allow** (Default)
+If the previous Job is still running when the next scheduled time arrives, a new Job is created anyway, allowing both to run simultaneously.
+
+**When to use:**
+- Independent, parallel-safe tasks
+- Data processing that can run multiple instances
+- Non-destructive operations
+
+**Example:**
+```yaml
+concurrencyPolicy: Allow
+```
+
+**Scenario:** If a 2 AM backup is still running at 2 AM the next day, it starts a second one anyway.
+
+**Pros:**
+- Ensures scheduled tasks always run
+- Good for tasks that need to complete regardless
+
+**Cons:**
+- Can cause resource contention
+- Potential data consistency issues
+- Not recommended for I/O intensive tasks
+
+---
+
+#### 2. **Forbid** (Highly Recommended for Backups/Databases)
+If the previous Job is still running when the next scheduled time arrives, the new Job creation is skipped for that cycle.
+
+**When to use:**
+- Database backups
+- Database maintenance operations
+- Any operation with exclusive resource requirements
+- Tasks that cannot run concurrently
+- Critical maintenance tasks
+
+**Example:**
+```yaml
+concurrencyPolicy: Forbid
+```
+
+**Scenario:** If the 2 AM backup is still running at 2 AM the next day, the next scheduled backup is skipped.
+
+**Pros:**
+- Prevents resource exhaustion
+- Ensures data consistency
+- Avoids lock conflicts in databases
+- Recommended for backups and database operations
+
+**Cons:**
+- Tasks might get skipped if previous execution is slow
+- Requires monitoring to ensure tasks aren't consistently missed
+
+---
+
+#### 3. **Replace**
+If the previous Job is still running when the next scheduled time arrives, the previous Job is terminated and a new one is started.
+
+**When to use:**
+- Health checks
+- Monitoring tasks
+- Non-critical status updates
+- Tasks where only the latest run is needed
+- Cleanup operations
+
+**Example:**
+```yaml
+concurrencyPolicy: Replace
+```
+
+**Scenario:** If the 2 AM backup is still running at 2 AM the next day, the existing backup is killed and a new one is started.
+
+**Pros:**
+- Ensures latest task always runs
+- Prevents queue buildup
+- Good for status checks
+
+**Cons:**
+- Interrupts long-running operations
+- May cause incomplete backups
+- Data loss risk for critical operations
+- Not recommended for backups or database operations
+
+---
+
+### Comparison Table
+
+| Policy | Overlapping Behavior | Resource Usage | Data Safety | Recommended Use |
+|--------|----------------------|-----------------|-------------|-----------------|
+| **Allow** | Both run | High (potential spike) | Lower | Independent, parallel-safe tasks |
+| **Forbid** | Skip new execution | Normal | High | Backups, database operations ⭐ |
+| **Replace** | Kill old, start new | Normal | Lower | Health checks, monitoring |
+
+---
+
+### Best Practices
+
+1. **For Backups & Database Operations**: Always use `Forbid`
+   ```yaml
+   concurrencyPolicy: Forbid
+   ```
+
+2. **Monitor Job Duration**: Set appropriate timeout values
+   ```yaml
+   spec:
+     activeDeadlineSeconds: 3600  # 1 hour timeout
+   ```
+
+3. **Add Failure Notifications**: Monitor missed runs and failures
+   ```bash
+   kubectl get cronjob -n my-web-namespace -o wide
+   ```
+
+4. **Log Job Execution**: Always check job history
+   ```bash
+   kubectl get jobs -n my-web-namespace --sort-by=.metadata.creationTimestamp
+   ```
+
 ## Resource Specifications
 
 ### CPU & Memory
@@ -156,7 +438,7 @@ The deployment creates **3 replicas** of the NGINX container by default. To scal
 kubectl scale deployment my-web-app -n my-web-namespace --replicas=5
 
 # Scale down to 1 replica
-kubectl scale deployment my-web-app -n my-web-namespace -–replicas=1
+kubectl scale deployment my-web-app -n my-web-namespace --replicas=1
 ```
 
 ## Usage Examples
@@ -327,6 +609,22 @@ kubectl set resources deployment my-web-app \
   --requests=memory=512Mi
 ```
 
+### Job/CronJob not running
+
+```bash
+# Check if cronjob is suspended
+kubectl get cronjob backup-cronjob -n my-web-namespace
+
+# Check recent job executions
+kubectl get jobs -n my-web-namespace --sort-by=.metadata.creationTimestamp
+
+# View job details and events
+kubectl describe job <job-name> -n my-web-namespace
+
+# Check for concurrency policy issues
+kubectl describe cronjob backup-cronjob -n my-web-namespace
+```
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit pull requests or open issues for improvements.
@@ -337,4 +635,4 @@ This project is licensed under the **Apache License 2.0** - see the [LICENSE](./
 
 ---
 
-**Keywords**: yaml, kubernetes, deployment, nginx, k8s, container, orchestration
+**Keywords**: yaml, kubernetes, deployment, nginx, k8s, container, orchestration, job, cronjob, scheduling
