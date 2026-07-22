@@ -1,6 +1,6 @@
 # Kubernetes NGINX Deployment
 
-A complete Kubernetes deployment configuration for running NGINX web servers using YAML manifests. This repository contains production-ready configurations with best practices for resource management, namespacing, and pod management.
+A complete Kubernetes deployment configuration for running NGINX web servers using YAML manifests. This repository contains production-ready configurations with best practices for resource manageme[...]
 
 ## 📋 Table of Contents
 
@@ -11,6 +11,7 @@ A complete Kubernetes deployment configuration for running NGINX web servers usi
 - [Configuration Files](#configuration-files)
 - [Resource Specifications](#resource-specifications)
 - [Usage Examples](#usage-examples)
+- [Example: Using GREETING in a Python script](#example-using-greeting-in-a-python-script)
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
 - [License](#license)
@@ -155,7 +156,7 @@ The deployment creates **3 replicas** of the NGINX container by default. To scal
 kubectl scale deployment my-web-app -n my-web-namespace --replicas=5
 
 # Scale down to 1 replica
-kubectl scale deployment my-web-app -n my-web-namespace --replicas=1
+kubectl scale deployment my-web-app -n my-web-namespace -–replicas=1
 ```
 
 ## Usage Examples
@@ -208,6 +209,73 @@ kubectl delete deployment my-web-app -n my-web-namespace
 # Note: Deleting the namespace also deletes all resources within it
 kubectl delete namespace my-web-namespace
 ```
+
+## Example: Using GREETING in a Python script
+
+If you want to run a simple Python script that reads an environment variable named GREETING, you can add a small script to the repository and set the environment variable on your pod or deployment.
+
+1) Create a file named `greet.py` with the following content:
+
+```python
+# greet.py
+import os
+print(os.environ["GREETING"])
+```
+
+2) Run locally:
+
+```bash
+# Run with an environment variable set
+GREETING="Hello from local" python3 greet.py
+```
+
+3) Run inside an existing pod (quick test):
+
+```bash
+# Copy the script into a running pod and execute it
+kubectl cp greet.py <pod-name>:/tmp/greet.py -n my-web-namespace
+kubectl exec -it <pod-name> -n my-web-namespace -- python3 /tmp/greet.py
+```
+
+Note: The pod must have Python installed for the above to work. The NGINX image does not include Python by default.
+
+4) Set GREETING as an environment variable in your Kubernetes deployment spec (e.g., in `k8s-deployement.yaml`) under the container spec:
+
+```yaml
+containers:
+  - name: web-server
+    image: nginx:1.25
+    env:
+      - name: GREETING
+        value: "Hello from Kubernetes"
+```
+
+After applying the change, you can exec into a pod that has Python (or add a sidecar/container that runs Python) to read the variable. Alternatively, set the env var on a debug pod that uses a Python image:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: debug-python
+  namespace: my-web-namespace
+spec:
+  containers:
+    - name: python
+      image: python:3.11-slim
+      command: ["sleep", "infinity"]
+      env:
+        - name: GREETING
+          value: "Hello from Kubernetes"
+```
+
+Apply and then run:
+
+```bash
+kubectl apply -f debug-python.yaml
+kubectl exec -it debug-python -n my-web-namespace -- python3 -c 'import os; print(os.environ["GREETING"])'
+```
+
+This README section shows where to place the small Python file (`greet.py`) and how to set/use the GREETING environment variable both locally and in Kubernetes.
 
 ## Troubleshooting
 
