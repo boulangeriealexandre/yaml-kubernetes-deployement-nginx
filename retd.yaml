@@ -131,7 +131,12 @@ ingress:
         # Controller-specific tweaks (Example uses NGINX Ingress Controller)
         nginx.ingress.kubernetes.io/ssl-redirect: "true"
         nginx.ingress.kubernetes.io/proxy-body-size: "10m"
-        nginx.ingress.kubernetes.io/rate-limit: "100"
+        nginx.ingress.kubernetes.io/limit-rps: "50"
+        nginx.ingress.kubernetes.io/ssl-redirect: "true"
+        nginx.ingress.kubernetes.io/hsts-max-age: "31536000" # 1 year in seconds
+        nginx.ingress.kubernetes.io/hsts-include-subdomains: "true"
+        nginx.ingress.kubernetes.io/hsts-preload: "true"
+        nginx.ingress.kubernetes.io/limit-whitelist: "10.0.0.0/8, 172.16.0.0/12"
     spec:
       ingressClassName: nginx
       rules:
