@@ -1,6 +1,6 @@
 # Kubernetes NGINX Deployment
 
-A complete Kubernetes deployment configuration for running NGINX web servers using YAML manifests. This repository contains production-ready configurations with best practices for resource management, along with Job and CronJob automation examples.
+A complete Kubernetes deployment configuration for running NGINX web servers using YAML manifests. This repository contains production-ready configurations with best practices for resource manageme[...]
 
 ## 📋 Table of Contents
 
@@ -9,6 +9,7 @@ A complete Kubernetes deployment configuration for running NGINX web servers usi
 - [Prerequisites](#prerequisites)
 - [Installation & Deployment](#installation--deployment)
 - [Configuration Files](#configuration-files)
+- [YAML Structure of all files](#yaml-structure-of-all-files)
 - [K8s Job](#k8s-job)
 - [K8s CronJob](#k8s-cronjob)
 - [concurrencyPolicy Options](#concurrencypolicy-options)
@@ -152,9 +153,186 @@ Resources:
 - **Type**: PersistentVolumeClaim (`my-web-pvc`)
 - **Access**: Read-Write enabled
 
+## YAML Structure of all files
+
+Below are concise skeletons and explanations of the YAML manifests included in this repository. Use these as a quick reference when you need to understand or extend the manifests.
+
+### 1) k8s-namespace.yaml
+
+Purpose: create an isolated namespace for the deployment.
+
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: my-web-namespace
+  labels:
+    environment: production
+  # optional: annotations
+```
+
+Top-level fields:
+- apiVersion
+- kind
+- metadata.name
+- metadata.labels / metadata.annotations
+
+---
+
+### 2) k8s-deployement.yaml
+
+Purpose: define the Deployment for the NGINX application.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-web-app
+  namespace: my-web-namespace
+  labels:
+    app: web
+    environment: prod
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+        - name: web-server
+          image: nginx:1.25
+          ports:
+            - containerPort: 80
+              protocol: TCP
+          env:
+            - name: APP_ENV
+              value: "production"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: app-data
+              mountPath: /var/www/html
+      volumes:
+        - name: app-data
+          persistentVolumeClaim:
+            claimName: my-web-pvc
+```
+
+Top-level fields to look for:
+- apiVersion, kind, metadata
+- spec.replicas, spec.selector, spec.template
+- spec.template.spec.containers[] and their image/ports/env/resources/volumeMounts
+- spec.template.spec.volumes[] (PersistentVolumeClaim or emptyDir)
+
+---
+
+### 3) k8s-job.yaml
+
+Purpose: run a one-time job or batch task.
+
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: backup-job
+  namespace: my-web-namespace
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      containers:
+        - name: backup
+          image: backup-utility:1.0
+          command: ["./backup.sh"]
+      restartPolicy: Never
+```
+
+Key fields:
+- spec.template.spec.containers[] (image, command, args)
+- restartPolicy
+- backoffLimit
+
+---
+
+### 4) k8s-cronjob.yaml
+
+Purpose: schedule Jobs on a repeating cadence (cron syntax).
+
+```yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup-cronjob
+  namespace: my-web-namespace
+spec:
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: backup
+              image: backup-utility:1.0
+              command: ["./backup.sh"]
+          restartPolicy: OnFailure
+      backoffLimit: 3
+```
+
+Key fields:
+- spec.schedule (cron string)
+- spec.concurrencyPolicy (Allow / Forbid / Replace)
+- spec.jobTemplate.spec.template.spec.containers[]
+- restartPolicy, backoffLimit, history limits
+
+---
+
+### 5) PersistentVolumeClaim (used by deployment)
+
+Purpose: declare the claim a pod will mount. Example skeleton below — actual storage depends on cluster/storage class.
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-web-pvc
+  namespace: my-web-namespace
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: standard  # optional, depends on cluster
+```
+
+Key fields:
+- spec.accessModes
+- spec.resources.requests.storage
+- spec.storageClassName (optional)
+
+---
+
+Notes & tips:
+- Use metadata.labels consistently to enable selectors, monitoring, and RBAC scoping.
+- Keep container images pinned to a specific tag for reproducible deployments (e.g., `nginx:1.25`).
+- Add readinessProbe and livenessProbe in production deployments to improve resilience.
+- Define resource requests and limits to prevent scheduling and OOM issues.
+
 ## K8s Job
 
-A Kubernetes Job creates one or more pods and ensures that a specified number of them successfully terminate. Jobs are useful for running one-time tasks, batch processing, or scheduled maintenance.
+A Kubernetes Job creates one or more pods and ensures that a specified number of them successfully terminate. Jobs are useful for running one-time tasks, batch processing, or scheduled maintenanc[...]
 
 **Key Characteristics:**
 - Runs one or more pods to completion
@@ -296,7 +474,7 @@ kubectl delete cronjob backup-cronjob -n my-web-namespace
 
 ## concurrencyPolicy Options
 
-The `concurrencyPolicy` field in CronJob specifications controls how Kubernetes handles overlapping job executions. This is crucial for preventing overlapping jobs, especially in scenarios like database backups or maintenance tasks.
+The `concurrencyPolicy` field in CronJob specifications controls how Kubernetes handles overlapping job executions. This is crucial for preventing overlapping jobs, especially in scenarios like d[...]
 
 ### Three Available Options:
 
@@ -494,7 +672,7 @@ kubectl delete namespace my-web-namespace
 
 ## Example: Using GREETING in a Python script
 
-If you want to run a simple Python script that reads an environment variable named GREETING, you can add a small script to the repository and set the environment variable on your pod or deployment.
+If you want to run a simple Python script that reads an environment variable named GREETING, you can add a small script to the repository and set the environment variable on your pod or deploymen[...]
 
 1) Create a file named `greet.py` with the following content:
 
@@ -532,7 +710,7 @@ containers:
         value: "Hello from Kubernetes"
 ```
 
-After applying the change, you can exec into a pod that has Python (or add a sidecar/container that runs Python) to read the variable. Alternatively, set the env var on a debug pod that uses a Python image:
+After applying the change, you can exec into a pod that has Python (or add a sidecar/container that runs Python) to read the variable. Alternatively, set the env var on a debug pod that uses a Py[...]
 
 ```yaml
 apiVersion: v1
