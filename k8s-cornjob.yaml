@@ -1,0 +1,39 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nightly-db-backup
+  namespace: database
+spec:
+  # --- CronJob-Specific Controls ---
+  schedule: "0 2 * * *"             # Cron syntax: Minute, Hour, Day, Month, Weekday
+  timeZone: "America/New_York"      # (K8s 1.27+) Overrides the default UTC control plane time
+  concurrencyPolicy: Forbid         # What to do if the last job hasn't finished yet
+  successfulJobsHistoryLimit: 3     # Keep the last 3 successful Job records
+  failedJobsHistoryLimit: 1         # Keep the last 1 failed Job record
+  startingDeadlineSeconds: 200      # If the schedule is missed, wait 200s before giving up
+  suspend: false                    # Set to true to pause the schedule without deleting it
+
+  # --- The Job Template ---
+  jobTemplate:
+    spec:
+      backoffLimit: 2               # Retry up to 2 times if the backup script fails
+      activeDeadlineSeconds: 3600   # Kill the job if it takes longer than 1 hour
+      ttlSecondsAfterFinished: 604800 # Clean up the Job record after 7 days
+      template:
+        spec:
+          containers:
+          - name: db-backup
+            image: postgres:15
+            command: ["/bin/sh", "-c", "pg_dump -U admin mydb > /backup/dump.sql"]
+            resources:
+              limits:
+                memory: "512Mi"     # CRITICAL: Prevent the backup from starving production pods
+                cpu: "500m"
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backup
+          volumes:
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: db-backup-pvc
+          restartPolicy: OnFailure  # Standard Job restart policy

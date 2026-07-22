@@ -1,0 +1,29 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migration-job
+  labels:
+    app: backend
+spec:
+  # --- Job-Specific Controls ---
+  completions: 1               # Total number of successful pods required
+  parallelism: 1               # How many pods can run at the exact same time
+  backoffLimit: 3              # Number of retries before giving up
+  activeDeadlineSeconds: 600   # Hard timeout for the entire Job (10 mins)
+  ttlSecondsAfterFinished: 86400 # Auto-delete the Job 24 hours after it finishes
+  
+  # --- The Pod Template ---
+  template:
+    metadata:
+      labels:
+        app: backend
+        role: migration
+    spec:
+      containers:
+      - name: db-migrator
+        image: my-registry/db-migrator:v1.2.0
+        command: ["python", "run_migrations.py", "--env", "prod"]
+        env:
+        - name: DB_HOST
+          value: "postgres-service"
+      restartPolicy: Never     # CRITICAL: Jobs do not restart containers, they create new Pods
