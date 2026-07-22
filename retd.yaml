@@ -1,0 +1,162 @@
+1. Create Laravel project
+composer create-project laravel/laravel laravel-app
+2. Create Dockerfile
+FROM php:8.3-fpm-alpine
+
+RUN apk add --no-cache \
+    libzip-dev icu-dev oniguruma-dev \
+    && docker-php-ext-install pdo_mysql mbstring zip bcmath opcache
+
+WORKDIR /var/www/html
+COPY . .
+RUN composer install --no-dev --optimize-autoloader \
+    && chown -R www-data:www-data storage bootstrap/cache
+
+EXPOSE 9000
+CMD ["php-fpm"]
+3. Build and load into kind
+docker build -t laravel-app:latest ./laravel-app
+kind load docker-image laravel-app:latest --name pulumi-nginx
+4. Add to Pulumi.yaml
+Add these resources to your existing Pulumi.yaml:
+variables:
+  appLabels:
+    app: nginx
+
+laravelDeployment:
+  type: kubernetes:apps/v1:Deployment
+  properties:
+    metadata:
+      namespace: ${namespace.metadata.name}
+      name: laravel
+    spec:
+      selector:
+        matchLabels:
+          app: laravel
+      replicas: 2
+      template:
+        metadata:
+          labels:
+            app: laravel
+        spec:
+          containers:
+            - name: laravel
+              image: laravel-app:latest
+              imagePullPolicy: Never
+              ports:
+                - containerPort: 9000
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi
+
+laravelService:
+  type: kubernetes:core/v1:Service
+  properties:
+    metadata:
+      namespace: ${namespace.metadata.name}
+      name: laravel
+    spec:
+      selector:
+        app: laravel
+      ports:
+        - port: 9000
+          targetPort: 9000
+          protocol: TCP
+      type: ClusterIP
+
+nginxConfigMap:
+  type: kubernetes:core/v1:ConfigMap
+  properties:
+    metadata:
+      namespace: ${namespace.metadata.name}
+      name: nginx-config
+    data:
+      default.conf: |
+        server {
+            listen 80;
+            server_name laravel.local;
+            root /var/www/html/public;
+            index index.php;
+
+            location / {
+                try_files $uri $uri/ /index.php?$query_string;
+            }
+
+            location ~ \.php$ {
+                fastcgi_pass laravel.nginx.svc.cluster.local:9000;
+                fastcgi_index index.php;
+                fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+                include fastcgi_params;
+            }
+        }
+5. Update the nginx Deployment to mount the config
+deployment:
+  type: kubernetes:apps/v1:Deployment
+  properties:
+    metadata:
+      namespace: ${namespace.metadata.name}
+      name: nginx
+    spec:
+      selector:
+        matchLabels: ${appLabels}
+      replicas: 2
+      template:
+        metadata:
+          labels: ${appLabels}
+        spec:
+          containers:
+            - name: nginx
+              image: nginx:alpine
+              ports:
+                - containerPort: 80
+              volumeMounts:
+                - name: nginx-config
+                  mountPath: /etc/nginx/conf.d
+          volumes:
+            - name: nginx-config
+              configMap:
+                name: nginx-config
+6. Update the Ingress
+ingress:
+  type: kubernetes:networking.k8s.io/v1:Ingress
+  properties:
+    metadata:
+      namespace: ${namespace.metadata.name}
+      name: nginx
+    spec:
+      ingressClassName: nginx
+      rules:
+        - host: nginx.local
+          http:
+            paths:
+              - pathType: Prefix
+                path: /
+                backend:
+                  service:
+                    name: nginx
+                    port:
+                      number: 80
+        - host: laravel.local
+          http:
+            paths:
+              - pathType: Prefix
+                path: /
+                backend:
+                  service:
+                    name: nginx
+                    port:
+                      number: 80
+7. Deploy
+pulumi up --yes --non-interactive
+8. Test
+kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 8080:80
+curl -H "Host: laravel.local" http://localhost:8080
+Key points:
+- imagePullPolicy: Never — uses the locally loaded kind image
+- nginx acts as reverse proxy to PHP-FPM on port 9000
+- ConfigMap injects the nginx config without rebuilding the image
+- Both nginx and laravel share the nginx namespace
