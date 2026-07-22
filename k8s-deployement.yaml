@@ -1,0 +1,76 @@
+# ==============================================================================
+# METADATA: Identifies the resource in the cluster
+# ==============================================================================
+apiVersion: apps/v1       # [Type: string] The API version for Deployments
+kind: Deployment          # [Type: string] The type of Kubernetes resource
+metadata:                 # [Type: map] Metadata to uniquely identify the object
+  name: my-web-app        # [Type: string] Name of the deployment
+  namespace: my-web-namespace # [Type: string] UPDATED: Deploying into our custom namespace
+  labels:                 # [Type: map] Key-value pairs for organizing resources
+    app: web              # [Type: string] Label key 'app' with value 'web'
+    environment: prod     # [Type: string] Label key 'environment' with value 'prod'
+
+# ==============================================================================
+# SPEC: The desired state of the Deployment
+# ==============================================================================
+spec:                     # [Type: map] The specification of the desired behavior
+  replicas: 3             # [Type: integer] Number of identical Pods to run
+  
+  selector:               # [Type: map] Defines how the Deployment finds the Pods it manages
+    matchLabels:          # [Type: map] Labels used to match pods
+      app: web            # [Type: string] Must match the labels in the pod template below
+
+  # ----------------------------------------------------------------------------
+  # TEMPLATE: The blueprint for the Pods created by this Deployment
+  # ----------------------------------------------------------------------------
+  template:               # [Type: map] The Pod template
+    metadata:             # [Type: map] Metadata for the Pods
+      labels:             # [Type: map] Labels applied to the Pods
+        app: web          # [Type: string] MUST match the selector.matchLabels above
+    
+    spec:                 # [Type: map] The desired state of the Pod
+      # ------------------------------------------------------------------------
+      # CONTAINERS: The actual applications running inside the Pod
+      # ------------------------------------------------------------------------
+      containers:         # [Type: list] List of containers in the pod
+      - name: web-server  # [Type: string] Name of the container
+        image: nginx:1.25 # [Type: string] Docker image and tag to run
+        
+        ports:            # [Type: list] Network ports to expose from the container
+        - containerPort: 80 # [Type: integer] The port number the app listens on
+          protocol: TCP   # [Type: string] The network protocol (TCP or UDP)
+
+        # ======================================================================
+        # RESOURCES: Compute Resource Requirements (CRITICAL FOR PRODUCTION)
+        # ======================================================================
+        resources:        # [Type: map] CPU and Memory constraints
+          requests:       # [Type: map] MINIMUM resources guaranteed to the container
+            cpu: "250m"   # [Type: string] CPU request. 250m = 0.25 of a CPU core
+            memory: "256Mi" # [Type: string] Memory request. 'Mi' = Mebibytes.
+          
+          limits:         # [Type: map] MAXIMUM resources the container is allowed to use
+            cpu: "500m"   # [Type: string] CPU limit. 500m = 0.5 of a CPU core
+            memory: "512Mi" # [Type: string] Memory limit. 
+
+        # ------------------------------------------------------------------------
+        # ENVIRONMENT VARIABLES: Passing config to the app
+        # ------------------------------------------------------------------------
+        env:              # [Type: list] Environment variables to set in the container
+        - name: APP_ENV   # [Type: string] The name of the environment variable
+          value: "production" # [Type: string] The value of the variable
+
+        # ------------------------------------------------------------------------
+        # VOLUME MOUNTS: Where the volumes appear inside the container's file system
+        # ------------------------------------------------------------------------
+        volumeMounts:     # [Type: list] Volumes to mount into the container's filesystem
+        - name: app-data  # [Type: string] Must match the name of the volume defined below
+          mountPath: /var/www/html # [Type: string] The path inside the container to mount the volume
+          readOnly: false # [Type: boolean] If true, the container can only read, not write
+
+      # ------------------------------------------------------------------------
+      # VOLUMES: The storage volumes available to all containers in this Pod
+      # ------------------------------------------------------------------------
+      volumes:            # [Type: list] List of volumes defined at the Pod level
+      - name: app-data    # [Type: string] Name of the volume (referenced by volumeMounts)
+        persistentVolumeClaim: # [Type: map] Specifies that this volume uses a PVC
+          claimName: my-web-pvc # [Type: string] The name of the PersistentVolumeClaim to attach
