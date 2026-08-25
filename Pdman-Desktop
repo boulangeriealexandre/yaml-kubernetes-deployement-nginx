@@ -1,0 +1,35 @@
+# How to start Podman Desktop (dev mode)
+
+## One-liner (as root shell)
+
+```bash
+su - figura -c 'export PATH=/opt/node24/bin:$PATH && export DISPLAY=:0 && export XAUTHORITY=/run/user/1000/gdm/Xauthority && cd /home/figura/podman-desktop && pnpm watch'
+```
+
+## Prerequisites (one-time setup)
+
+### 1. Fix chrome-sandbox permissions
+
+```bash
+chown root:root /home/figura/podman-desktop/node_modules/electron/dist/chrome-sandbox
+chmod 4755 /home/figura/podman-desktop/node_modules/electron/dist/chrome-sandbox
+```
+
+### 2. Allow figura to access the X display
+
+```bash
+xhost +local:figura
+```
+
+### 3. Fix file ownership (if needed)
+
+```bash
+chown -R figura:figura /home/figura/podman-desktop
+```
+
+## Notes
+
+- Node.js 24 is required (`/opt/node24/bin/node`, currently v24.19.0)
+- The default system node is v22, which pnpm rejects
+- `pnpm install` must be run with Node 24 in PATH
+- Podman socket may need to be started separately: `podman system service --time=0 &`
